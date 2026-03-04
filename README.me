@@ -169,7 +169,7 @@ Value: prod
 Example alarm ARN:
 
 ```
-arn:aws:cloudwatch:us-east-1:373099676716:alarm:Lab1-ASG-CPU-High
+arn:aws:cloudwatch:us-east-1:373099676716:alarm:EC2-CPU-High
 ```
 
 ---
@@ -180,7 +180,7 @@ You can manually trigger an alarm state change using the AWS CLI.
 
 ```
 aws cloudwatch set-alarm-state \
---alarm-name Lab1-ASG-CPU-High \
+--alarm-name EC2-CPU-High \
 --state-value ALARM \
 --state-reason "Manual test"
 ```
@@ -206,10 +206,10 @@ Example payload sent to the DevOps Agent webhook.
 ```json
 {
   "eventType": "incident",
-  "incidentId": "cw-Lab1-ASG-CPU-High-1700000000000",
+  "incidentId": "cw-EC2-CPU-High-1700000000000",
   "action": "created",
   "priority": "CRITICAL",
-  "title": "ALARM: Lab1-ASG-CPU-High",
+  "title": "ALARM: EC2-CPU-High",
   "description": "Threshold Crossed",
   "timestamp": "2026-03-04T01:00:00Z",
   "service": "CloudWatch",
@@ -224,7 +224,7 @@ Example payload sent to the DevOps Agent webhook.
       "env": "prod"
     },
     "cloudwatch": {
-      "alarmName": "Lab1-ASG-CPU-High",
+      "alarmName": "EC2-CPU-High",
       "state": "ALARM",
       "threshold": 80,
       "metric": "CPUUtilization"
@@ -311,6 +311,5 @@ Benefits:
 ---
 
 # Author
-
-AWS Cloud Automation Example  
-CloudWatch → EventBridge → Lambda → DevOps Agent
+ksravikumar2005@gmail.com
+LinkedIn: https://www.linkedin.com/in/awsravican/
