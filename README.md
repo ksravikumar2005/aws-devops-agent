@@ -311,5 +311,4 @@ Benefits:
 ---
 
 # Author
-ksravikumar2005@gmail.com
-LinkedIn: https://www.linkedin.com/in/awsravican/
+Email: ksravikumar2005@gmail.com | LinkedIn: https://www.linkedin.com/in/awsravican/
