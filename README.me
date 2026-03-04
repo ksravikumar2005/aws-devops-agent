@@ -1,0 +1,316 @@
+# CloudWatch Alarm → AWS DevOps Agent Webhook Integration
+
+This project deploys a **fully automated integration between CloudWatch alarms and AWS DevOps Agent investigations** using AWS CloudFormation.
+
+When a CloudWatch alarm enters the **ALARM state**, this solution automatically triggers an **AI-powered investigation** through the AWS DevOps Agent webhook.
+
+The integration performs the following:
+
+1. Detects **CloudWatch alarm state changes**
+2. Enriches the alarm with configuration and metric data
+3. Builds an **incident payload**
+4. Signs the payload using **HMAC SHA-256**
+5. Sends the payload to the **AWS DevOps Agent Generic Webhook**
+
+---
+
+# Architecture
+
+```mermaid
+flowchart LR
+
+CW[CloudWatch Alarm] -->|State Change| EB[EventBridge Rule]
+
+EB -->|Invoke| L[Lambda Function]
+
+L -->|DescribeAlarms| CWAPI[CloudWatch API]
+L -->|GetMetricStatistics| METRIC[Metric Data]
+L -->|Read Secret| SM[Secrets Manager]
+
+L -->|Build Payload + HMAC Signature| WH[DevOps Agent Webhook]
+
+WH --> AI[AWS DevOps Agent\nAutomated Investigation]
+```
+
+---
+
+# Features
+
+## Automatic Incident Creation
+
+When a CloudWatch alarm transitions to **ALARM**, the Lambda function automatically generates a structured **incident payload** and sends it to AWS DevOps Agent.
+
+---
+
+## Alarm Enrichment
+
+The Lambda function enriches the event with additional information:
+
+- Alarm configuration
+- Alarm tags
+- Latest metric datapoints
+- AWS account ID
+- AWS region
+- Alarm threshold configuration
+
+This provides the DevOps Agent with **complete investigation context**.
+
+---
+
+## Tag-Based Filtering
+
+Only alarms tagged with:
+
+```
+auto_investigate=true
+```
+
+will trigger investigations.
+
+This allows teams to **control which alarms trigger automated analysis**.
+
+---
+
+## Environment-Based Priority
+
+The alarm **env tag** determines the priority of the incident.
+
+| Tag | Priority |
+|----|----|
+| prod | CRITICAL |
+| uat | MEDIUM |
+| dev | LOW |
+
+---
+
+## Secure Webhook Authentication
+
+The webhook request uses **HMAC SHA-256 authentication**.
+
+Signature format:
+
+```
+HMAC_SHA256(timestamp:payload)
+```
+
+Headers sent to the webhook:
+
+```
+Content-Type: application/json
+x-amzn-event-timestamp: <timestamp>
+x-amzn-event-signature: <signature>
+```
+
+Webhook credentials are stored securely in **AWS Secrets Manager**.
+
+---
+
+# CloudFormation Resources
+
+This stack deploys the following infrastructure.
+
+| Resource | Purpose |
+|--------|--------|
+| Secrets Manager Secret | Stores webhook URL and secret |
+| Lambda Function | Processes alarms and sends webhook |
+| IAM Role | Permissions for Lambda |
+| EventBridge Rule | Captures CloudWatch alarm events |
+| Lambda Permission | Allows EventBridge to invoke Lambda |
+
+---
+
+# Deployment
+
+## Prerequisites
+
+- AWS CLI configured
+- CloudFormation permissions
+- Existing AWS DevOps Agent webhook endpoint
+
+---
+
+## Deploy the stack
+
+```bash
+aws cloudformation deploy \
+--template-file template.yaml \
+--stack-name devops-agent-alarm-integration \
+--capabilities CAPABILITY_NAMED_IAM \
+--parameter-overrides \
+WebhookUrl=https://event-ai.us-east-1.api.aws/webhook/generic/YOUR_WEBHOOK_ID \
+WebhookSecret=YOUR_WEBHOOK_SECRET
+```
+
+---
+
+# Required Alarm Tags
+
+For an alarm to trigger automated investigations, it must include the following tags.
+
+```
+auto_investigate = true
+env = prod | uat | dev
+```
+
+Example:
+
+```
+Key: auto_investigate
+Value: true
+
+Key: env
+Value: prod
+```
+
+---
+
+# Example Alarm
+
+Example alarm ARN:
+
+```
+arn:aws:cloudwatch:us-east-1:373099676716:alarm:Lab1-ASG-CPU-High
+```
+
+---
+
+# Testing the Integration
+
+You can manually trigger an alarm state change using the AWS CLI.
+
+```
+aws cloudwatch set-alarm-state \
+--alarm-name Lab1-ASG-CPU-High \
+--state-value ALARM \
+--state-reason "Manual test"
+```
+
+This will trigger the workflow:
+
+```
+CloudWatch Alarm
+    ↓
+EventBridge Rule
+    ↓
+Lambda Function
+    ↓
+DevOps Agent Webhook
+```
+
+---
+
+# Example Incident Payload
+
+Example payload sent to the DevOps Agent webhook.
+
+```json
+{
+  "eventType": "incident",
+  "incidentId": "cw-Lab1-ASG-CPU-High-1700000000000",
+  "action": "created",
+  "priority": "CRITICAL",
+  "title": "ALARM: Lab1-ASG-CPU-High",
+  "description": "Threshold Crossed",
+  "timestamp": "2026-03-04T01:00:00Z",
+  "service": "CloudWatch",
+  "data": {
+    "metadata": {
+      "region": "us-east-1",
+      "environment": "prod",
+      "accountId": "373099676716"
+    },
+    "tags": {
+      "auto_investigate": "true",
+      "env": "prod"
+    },
+    "cloudwatch": {
+      "alarmName": "Lab1-ASG-CPU-High",
+      "state": "ALARM",
+      "threshold": 80,
+      "metric": "CPUUtilization"
+    }
+  }
+}
+```
+
+---
+
+# Lambda Permissions
+
+The Lambda function requires the following permissions:
+
+```
+cloudwatch:DescribeAlarms
+cloudwatch:ListTagsForResource
+cloudwatch:GetMetricStatistics
+secretsmanager:GetSecretValue
+sts:GetCallerIdentity
+```
+
+These permissions are included in the CloudFormation template.
+
+---
+
+# Troubleshooting
+
+## Lambda triggered but no investigation started
+
+Check the Lambda logs:
+
+```
+CloudWatch Logs
+/aws/lambda/<lambda-name>
+```
+
+Common issues:
+
+| Problem | Cause |
+|--------|--------|
+Alarm skipped | Missing `auto_investigate=true` tag |
+Webhook failure | Incorrect secret or URL |
+Duplicate incidents | DevOps Agent deduplicates `incidentId` |
+Invalid signature | HMAC mismatch |
+
+---
+
+# Security
+
+Security best practices implemented:
+
+- Webhook credentials stored in **AWS Secrets Manager**
+- No secrets stored in Lambda environment variables
+- HMAC request signing
+- IAM least-privilege permissions
+
+---
+
+# Future Enhancements
+
+Possible improvements:
+
+- Multi-webhook routing by team tag
+- Slack / PagerDuty fallback notifications
+- Support for **Composite Alarms**
+- Alarm deduplication logic
+- Investigation result storage in DynamoDB
+- Dashboard showing automated investigations
+
+---
+
+# Summary
+
+This solution enables **automatic incident investigation for CloudWatch alarms** by integrating AWS monitoring with **AWS DevOps Agent AI analysis**.
+
+Benefits:
+
+- Faster root cause analysis
+- Reduced manual triage
+- Automated incident creation
+- Secure webhook authentication
+
+---
+
+# Author
+
+AWS Cloud Automation Example  
+CloudWatch → EventBridge → Lambda → DevOps Agent
